@@ -286,9 +286,13 @@
         closeModal.addEventListener('click', closeResult);
         
         // 點背景關閉
-        resultModal.addEventListener('click', (e) => {
-            if (e.target === resultModal) closeResult();
-        });
+       closeModal.addEventListener('click', () => {
+    const cardName = resultText.innerText;
+    // 直接開新視窗搜尋這張牌
+    window.open(`https://www.google.com/search?q=托特塔羅+${cardName}+解析`, '_blank');
+    // 搜尋後順便關閉目前的彈窗
+    closeResult();
+});
 
         // 初始化
         updateWheel();
@@ -296,3 +300,4 @@
     </script>
 </body>
 </html>
+
