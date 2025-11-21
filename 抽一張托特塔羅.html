@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>抽一張托特塔羅，知道自己今天的運勢</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 引入好看的中文字體 */
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap');
+        
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #fff7ed; /* Orange-50 */
+            background-image: radial-gradient(#fdba74 2px, transparent 2px);
+            background-size: 24px 24px;
+            touch-action: manipulation; /* 防止手機上雙擊縮放 */
+        }
+
+        /* 轉盤容器：這是會旋轉的部分 */
+        .wheel-container {
+            width: 300px;
+            height: 300px;
+            position: relative;
+            border-radius: 50%;
+            border: 8px solid #ffffff;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+            /* 關鍵：預設過渡效果，確保旋轉時有動畫 */
+            transition: transform 5s cubic-bezier(0.2, 0, 0.1, 1);
+        }
+
+        /* 轉盤中的 Canvas */
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* 指針 */
+        .pointer {
+            position: absolute;
+            top: -25px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 20;
+            filter: drop-shadow(0 4px 2px rgba(0,0,0,0.2));
+        }
+
+        /* 結果彈窗動畫 */
+        @keyframes pop-in {
+            0% { transform: scale(0.5); opacity: 0; }
+            70% { transform: scale(1.1); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .animate-pop {
+            animation: pop-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+
+        /* 高亮光暈動畫 */
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 20px rgba(251, 191, 36, 0.5); }
+            50% { box-shadow: 0 0 50px rgba(251, 191, 36, 1); }
+        }
+        .winner-glow {
+            animation: pulse-glow 1s infinite;
+            border-color: #fbbf24; /* Amber-400 */
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4 text-slate-800">
+
+    <div class="bg-white/95 backdrop-blur w-full max-w-md rounded-3xl shadow-2xl p-6 flex flex-col items-center border-t-4 border-orange-400">
+        
+        <div class="text-center mb-6">
+            <h1 class="text-3xl font-black text-orange-600 tracking-tight">🪞 抽一張托特塔羅</h1>
+            <p class="text-slate-500 text-sm mt-1">知道自己今天的運勢</p>
+        </div>
+
+        <div class="w-full mb-6 relative group">
+            <label class="block text-xs font-bold text-slate-400 uppercase mb-1 ml-1">輸入選項 (用逗號分隔)</label>
+            <textarea id="optionsInput" 
+                class="w-full h-24 p-4 rounded-xl bg-orange-50 border-2 border-orange-100 text-slate-700 font-medium focus:outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100 transition-all resize-none placeholder:text-orange-200/80"
+                placeholder="愚人, 魔法師, 女祭司, 女王, 帝王">愚人, 魔法師, 女祭司, 女王, 帝王, 大祭司, 戀人, 戰車, 調節, 隱士, 命運, 慾望, 吊人, 死神, 藝術, 惡魔, 塔, 星星, 月亮, 太陽, 新紀元, 宇宙 </textarea>
+            <div class="absolute bottom-2 right-2 text-[10px] text-orange-300 font-bold bg-white px-2 py-0.5 rounded-full shadow-sm">
+                <span id="itemCount">22</span> 個選項
+            </div>
+        </div>
+
+        <div class="relative mb-8">
+            <div class="pointer">
+                <svg width="50" height="50" viewBox="0 0 40 40">
+                    <path d="M20 40 L5 10 L35 10 Z" fill="#ef4444" stroke="white" stroke-width="3"/>
+                </svg>
+            </div>
+
+            <div id="wheel" class="wheel-container" style="transform: rotate(0deg);">
+                <canvas id="canvas" width="600" height="600"></canvas> </div>
+
+            <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 bg-white rounded-full shadow-lg flex items-center justify-center z-10 border-4 border-orange-100">
+                <span class="text-2xl">✡️</span>
+            </div>
+        </div>
+
+        <button id="spinButton" class="w-full py-4 bg-gradient-to-r from-orange-500 to-red-500 rounded-2xl text-white font-black text-xl shadow-lg shadow-orange-200 transform transition hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center gap-2">
+            <span>GO! 開始轉動</span>
+        </button>
+
+    </div>
+
+    <div id="resultModal" class="fixed inset-0 bg-black/60 z-50 hidden flex items-center justify-center p-4 backdrop-blur-sm opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-3xl p-8 max-w-xs w-full text-center shadow-2xl transform scale-90 transition-transform duration-300" id="resultCard">
+            <div class="text-6xl mb-4 animate-bounce">🎉</div>
+            <h2 class="text-xl font-bold text-slate-500 mb-2">命運決定...</h2>
+            <div id="resultText" class="text-3xl font-black text-orange-600 leading-tight py-4 border-y-2 border-dashed border-orange-100 my-4">
+                </div>
+            <button id="closeModal" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 px-8 rounded-full transition-colors w-full">
+                去看解答！
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // --- 變數設定 ---
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const spinButton = document.getElementById('spinButton');
+        const optionsInput = document.getElementById('optionsInput');
+        const wheel = document.getElementById('wheel');
+        const resultModal = document.getElementById('resultModal');
+        const resultCard = document.getElementById('resultCard');
+        const resultText = document.getElementById('resultText');
+        const closeModal = document.getElementById('closeModal');
+        const itemCountLabel = document.getElementById('itemCount');
+
+        // 配色盤 (高飽和度)
+        const colors = ['#FF6B6B', '#4ECDC4', '#FFD93D', '#FF9F43', '#6C5CE7', '#A3CB38', '#F78FB3', '#3DC1D3'];
+
+        let options = [];
+        let currentRotation = 0; // 紀錄當前角度，避免轉盤倒轉
+        let isSpinning = false;
+
+        // --- 核心函數 ---
+
+        // 1. 讀取輸入並繪製
+        function updateWheel() {
+            const text = optionsInput.value;
+            // 以逗號或換行分割，並過濾空值
+            options = text.split(/[,，\n]/).map(s => s.trim()).filter(s => s !== "");
+            
+            // 防呆：如果沒輸入，給預設值
+            if (options.length === 0) options = ['隨便吃', '斷食', '吃空氣'];
+            
+            itemCountLabel.innerText = options.length;
+            draw(options);
+        }
+
+        // 2. 繪製 Canvas
+        function draw(items) {
+            const len = items.length;
+            const arc = (2 * Math.PI) / len;
+            const radius = canvas.width / 2;
+            const cx = radius;
+            const cy = radius;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.font = "bold 28px 'Noto Sans TC'"; // 字體放大
+            ctx.textBaseline = "middle";
+
+            for (let i = 0; i < len; i++) {
+                const angle = i * arc - (Math.PI / 2); // -90度開始畫，讓第一個選項在正上方
+
+                // 畫扇形
+                ctx.fillStyle = colors[i % colors.length];
+                ctx.beginPath();
+                ctx.moveTo(cx, cy);
+                ctx.arc(cx, cy, radius, angle, angle + arc);
+                ctx.lineTo(cx, cy);
+                ctx.fill();
+                
+                // 畫白線分隔
+                ctx.strokeStyle = "#ffffff";
+                ctx.lineWidth = 4;
+                ctx.stroke();
+
+                // 畫文字
+                ctx.save();
+                ctx.translate(cx, cy);
+                ctx.rotate(angle + arc / 2);
+                ctx.textAlign = "right";
+                ctx.fillStyle = "#fff";
+                ctx.shadowColor = "rgba(0,0,0,0.3)";
+                ctx.shadowBlur = 4;
+                ctx.fillText(items[i], radius - 30, 0);
+                ctx.restore();
+            }
+        }
+
+        // 3. 轉動邏輯 (關鍵修正)
+        function spin() {
+            if (isSpinning) return;
+            isSpinning = true;
+            
+            // UI 狀態更新
+            spinButton.disabled = true;
+            spinButton.innerHTML = `<span class="animate-spin">⌛</span> 命運運算中...`;
+            wheel.classList.remove('winner-glow'); // 移除舊的高亮
+
+            // 計算角度
+            // 基本圈數 5~10 圈 (360 * 5)
+            // 隨機角度 (0~360)
+            const randomDeg = Math.floor(Math.random() * 360);
+            const totalDeg = (360 * 8) + randomDeg;
+            
+            // 累加角度 (這樣轉盤才會一直往同一個方向轉，不會倒帶)
+            currentRotation += totalDeg;
+
+            // 執行 CSS 動畫
+            wheel.style.transform = `rotate(${currentRotation}deg)`;
+
+            // 等待 5 秒動畫結束
+            setTimeout(() => {
+                finishSpin(currentRotation);
+            }, 5000);
+        }
+
+        // 4. 計算結果並顯示
+        function finishSpin(finalRotation) {
+            isSpinning = false;
+            spinButton.disabled = false;
+            spinButton.innerHTML = `<span>GO! 再轉一次</span>`;
+            
+            // 數學計算：
+            // 轉盤轉了 +N 度 (順時針)。
+            // 實際停在指針(正上方)的點，相當於逆時針走了 (N % 360) 度。
+            // 因為我們繪製時，第一個選項(index 0)是從 -90度(正上方) 開始畫的。
+            // 所以這比較簡單：
+            const degrees = finalRotation % 360;
+            
+            // 計算每一塊的角度
+            const arcDeg = 360 / options.length;
+            
+            // 計算 index
+            // 由於轉盤順時針轉，指針相對於轉盤是逆時針掃過。
+            // index = (總選項數 - (轉過的角度 / 每塊角度)) % 總選項數
+            let index = Math.floor((360 - degrees) / arcDeg) % options.length;
+            
+            // 顯示結果
+            const winner = options[index];
+            showResult(winner);
+            
+            // 轉盤增加高亮特效
+            wheel.classList.add('winner-glow');
+        }
+
+        function showResult(text) {
+            resultText.innerText = text;
+            
+            // 顯示 Modal
+            resultModal.classList.remove('hidden');
+            // 強制 Reflow 讓 opacity transition 生效
+            void resultModal.offsetWidth; 
+            resultModal.classList.remove('opacity-0');
+            resultCard.classList.remove('scale-90');
+            resultCard.classList.add('scale-100', 'animate-pop');
+        }
+
+        function closeResult() {
+            resultModal.classList.add('opacity-0');
+            resultCard.classList.remove('scale-100');
+            resultCard.classList.add('scale-90');
+            
+            setTimeout(() => {
+                resultModal.classList.add('hidden');
+                resultCard.classList.remove('animate-pop');
+            }, 300);
+        }
+
+        // --- 事件監聽 ---
+        spinButton.addEventListener('click', spin);
+        
+        optionsInput.addEventListener('input', () => {
+            if (!isSpinning) updateWheel();
+        });
+
+        closeModal.addEventListener('click', closeResult);
+        
+        // 點背景關閉
+        resultModal.addEventListener('click', (e) => {
+            if (e.target === resultModal) closeResult();
+        });
+
+        // 初始化
+        updateWheel();
+
+    </script>
+</body>
+</html>
